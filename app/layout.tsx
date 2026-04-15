@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Nav from "@/components/ui/Nav";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -27,7 +28,18 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-screen bg-black text-white">
+        {/* 🌌 Subtle global background */}
+        <div className="fixed inset-0 -z-10 bg-gradient-to-br from-purple-900/20 via-black to-cyan-900/20" />
+
+        {/* 🔝 Navigation */}
+        <Nav />
+
+        {/* 📦 App Content Wrapper */}
+        <div className="flex-1 w-full max-w-xl mx-auto px-3 sm:px-4">
+          {children}
+        </div>
+      </body>
     </html>
   );
 }
