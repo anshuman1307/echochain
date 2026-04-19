@@ -1,121 +1,162 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-
-const DEV_USERS = [
-  { id: "11111111-1111-1111-1111-111111111111", username: "user1" },
-  { id: "22222222-2222-2222-2222-222222222222", username: "user2" },
-  { id: "33333333-3333-3333-3333-333333333333", username: "user3" },
-  { id: "44444444-4444-4444-4444-444444444444", username: "user4" },
-  { id: "55555555-5555-5555-5555-555555555555", username: "user5" },
-];
 
 export default function Home() {
   const [message, setMessage] = useState("");
-  const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
-  // const [user, setUser] = useState<any>(null);
-  const [user, setUser] = useState<any>(DEV_USERS[0]);
+  const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [focused, setFocused] = useState(false);
 
-  // 🔐 Get current user
-  // useEffect(() => {
-  //   const getSession = async () => {
-  //     const { data } = await supabase.auth.getSession();
+  // ✨ NEW STATES
+  const [isSending, setIsSending] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+  const [typingPulse, setTypingPulse] = useState(false);
+  const [showEchoAnim, setShowEchoAnim] = useState(false);
+  const [notification, setNotification] = useState<string | null>(null);
+  const [reachAnim, setReachAnim] = useState(false);
+  const [location, setLocation] = useState<string | null>(null);
 
-  //     console.log("SESSION INIT:", data);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const router = useRouter();
 
-  //     if (data.session?.user) {
-  //       setUser(data.session.user);
-  //       await ensureUserExists(data.session.user);
-  //     }
+  // 🔐 Auth
+  useEffect(() => {
+    let mounted = true;
 
-  //     setLoading(false);
-  //   };
+    const init = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-  //   getSession();
+      if (!mounted) return;
 
-  //   const { data: listener } = supabase.auth.onAuthStateChange(
-  //     async (event, session) => {
-  //       console.log("AUTH CHANGE:", event, session);
+      if (!user) {
+        router.push("/login");
+        return;
+      }
 
-  //       if (session?.user) {
-  //         setUser(session.user);
-  //         await ensureUserExists(session.user);
-  //       } else {
-  //         setUser(null);
-  //       }
-  //     },
-  //   );
+      setUser(user);
+      setLoading(false);
+    };
 
-  //   return () => {
-  //     listener.subscription.unsubscribe();
-  //   };
-  // }, []);
+    init();
 
-  // 🧬 Ensure user exists in DB
-  const ensureUserExists = async (user: any) => {
-    console.log("🧬 Checking user in DB:", user.id);
+    return () => {
+      mounted = false;
+    };
+  }, [router]);
 
-    const { data, error } = await supabase
-      .from("users")
-      .select("*")
-      .eq("id", user.id)
-      .maybeSingle();
+  // 🔔 REALTIME LISTENER (ECHO REACHED SOMEONE)
+  useEffect(() => {
+    if (!user) return;
 
-    console.log("📦 User query result:", data, error);
-
-    if (!data) {
-      console.log("➕ Creating user in DB");
-
-      const { error: insertError } = await supabase.from("users").insert([
+    const channel = supabase
+      .channel("echo-live")
+      .on(
+        "postgres_changes",
         {
-          id: user.id,
-          username: user.email,
+          event: "INSERT",
+          schema: "public",
+          table: "echo_deliveries",
         },
-      ]);
+        (payload) => {
+          console.log("🔥 REALTIME EVENT:", payload);
+          const newDelivery = payload.new;
 
-      console.log("📝 Insert user result:", insertError);
-    }
+          // 🌍 RECEIVED ECHO (Inbox side)
+          if (newDelivery.user_id === user.id) {
+            const loc = [newDelivery.city, newDelivery.country]
+              .filter(Boolean)
+              .join(", ");
+
+            setNotification(
+              loc ? `📥 Echo arrived from ${loc}` : "📥 A new echo reached you",
+            );
+
+            setTimeout(() => setNotification(null), 3000);
+          }
+
+          // 🔥 YOUR ECHO GREW (Dashboard / Sender side)
+          if (newDelivery.user_id !== user.id) {
+            const loc = [newDelivery.city, newDelivery.country]
+              .filter(Boolean)
+              .join(", ");
+
+            setLocation(loc || "somewhere");
+
+            setNotification(
+              loc
+                ? `🌍 Your echo reached ${loc}`
+                : "🌍 Your echo reached someone",
+            );
+
+            // 💫 trigger +1 animation
+            setReachAnim(true);
+            setTimeout(() => setReachAnim(false), 2000);
+
+            setTimeout(() => setNotification(null), 3000);
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
+  // ⏱ Cooldown
+  useEffect(() => {
+    if (cooldown === 0) return;
+
+    const timer = setInterval(() => {
+      setCooldown((c) => c - 1);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [cooldown]);
+
+  // 🧠 Validation
+  const validateMessage = (text: string) => {
+    const trimmed = text.trim();
+    if (trimmed.length < 10) return false;
+    if (trimmed.split(/\s+/).length < 2) return false;
+    if (/(.)\1{5,}/.test(trimmed)) return false;
+    return true;
   };
 
-  // 🔐 Login
-  const handleLogin = async () => {
-    console.log("📨 Sending magic link to:", email);
+  const isValid = validateMessage(message);
 
-    const { data, error } = await supabase.auth.signInWithOtp({
-      email,
-    });
+  // ✍️ Typing
+  const handleInput = (e: any) => {
+    const el = textareaRef.current;
+    if (!el) return;
 
-    console.log("📬 Login response:", data, error);
+    el.style.height = "0px";
+    el.style.height = el.scrollHeight + "px";
 
-    if (error) {
-      alert("Error sending magic link");
-    } else {
-      alert("Check your email!");
-    }
+    setMessage(e.target.value);
+
+    setTypingPulse(true);
+    setTimeout(() => setTypingPulse(false), 300);
+
+    if (errorMsg) setErrorMsg("");
   };
 
-  // ✉️ Send Echo
+  // 🎯 SEND
   const handleSend = async () => {
-    console.log("🚀 Sending echo...");
-    if (!message.trim()) {
-      console.log("⚠️ Empty message");
-      return;
-    }
+    if (!isValid || isSending || cooldown > 0) return;
 
-    if (!user) {
-      console.log("❌ No user found");
-      return;
-    }
+    setIsSending(true);
+    setShowEchoAnim(true);
 
-    console.log("👤 Current user:", user);
-    console.log("📝 Message:", message);
-
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("echoes")
       .insert([
         {
@@ -124,169 +165,179 @@ export default function Home() {
           chain_length: 1,
           lives_remaining: 3,
           status: "active",
-          total_reach: 1, // add this column if not already
+          total_reach: 1,
         },
       ])
       .select();
 
-    if (error) {
-      alert("Error sending echo: " + error.message);
-      return;
-    }
+    const echo = data?.[0];
 
-    const echo = data[0];
-
-    console.log("✅ Echo created:", echo);
-
-    // 🔍 Step 1: get all users except sender
-    const { data: users, error: usersError } = await supabase
+    const { data: users } = await supabase
       .from("users")
       .select("id")
       .neq("id", user.id);
 
-    if (usersError || !users || users.length === 0) {
-      console.log("❌ No users available to send echo");
-      return;
-    }
+    if (users && users.length > 0) {
+      const randomUser = users[Math.floor(Math.random() * users.length)];
 
-    // 🎯 Step 2: pick random user
-    const randomUser = users[Math.floor(Math.random() * users.length)];
-
-    console.log("🎯 Sending to:", randomUser.id);
-
-    // 📦 Step 3: create delivery
-    const { error: deliveryError } = await supabase
-      .from("echo_deliveries")
-      .insert([
+      await supabase.from("echo_deliveries").insert([
         {
           echo_id: echo.id,
           user_id: randomUser.id,
           status: "pending",
+          step_number: 1,
         },
       ]);
+    }
 
-    if (deliveryError) {
-      console.log("❌ Delivery error:", deliveryError);
-      alert("Echo created but delivery failed");
-    } else {
-      console.log("📨 Echo delivered successfully");
+    setTimeout(() => {
+      setShowEchoAnim(false);
+      setIsSending(false);
       setMessage("");
       setSent(true);
+      setCooldown(5);
 
-      setTimeout(() => {
-        setSent(false);
-      }, 3000);
-    }
+      setTimeout(() => setSent(false), 2000);
+    }, 800);
   };
 
-  // ⏳ Loading
-  // if (loading) {
-  //   return (
-  //     <main className="flex min-h-screen items-center justify-center bg-black text-white">
-  //       Loading...
-  //     </main>
-  //   );
-  // }
+  if (loading) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-black text-white">
+        Loading...
+      </main>
+    );
+  }
 
-  // 🔐 Login UI
-  // if (!user) {
-  //   return (
-  //     <main className="flex min-h-screen items-center justify-center bg-black text-white px-4">
-  //       <div className="w-full max-w-md space-y-4">
-  //         <h1 className="text-3xl font-bold tracking-tight text-center">EchoChain</h1>
-
-  //         <input
-  //           type="email"
-  //           placeholder="Enter your email"
-  //           value={email}
-  //           onChange={(e) => setEmail(e.target.value)}
-  //           className="w-full p-3 rounded bg-gray-900 border border-gray-700"
-  //         />
-
-  //         <Button className="w-full" onClick={handleLogin}>
-  //           Send Magic Link
-  //         </Button>
-  //       </div>
-  //     </main>
-  //   );
-  // }
-
-  // 🏠 Main UI
   return (
-    <main className="min-h-screen bg-black text-white px-3 py-6 sm:px-4 flex items-center justify-center">
-      <div className="w-full max-w-md space-y-5">
-        <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-center">
-          EchoChain
-        </h1>
+    <main className="relative min-h-screen px-4 text-white overflow-hidden">
+      {/* 🌊 Background */}
+      {notification && (
+        <div className="fixed top-20 right-4 z-50 px-4 py-2 rounded-lg text-sm bg-white/10 backdrop-blur-md border border-white/10 animate-fade-in">
+          {notification}
+        </div>
+      )}
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-black via-[#020617] to-[#020617]" />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-cyan-500/10 via-purple-500/10 to-transparent animate-pulse" />
 
-        <select
-          value={user.id}
-          onChange={(e) => {
-            const selected = DEV_USERS.find((u) => u.id === e.target.value);
-            setUser(selected);
-          }}
-          className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
-        >
-          {DEV_USERS.map((u) => (
-            <option key={u.id} value={u.id}>
-              {u.username}
-            </option>
-          ))}
-        </select>
+      {/* 🌍 ECHO TRAVEL ANIMATION */}
+      {reachAnim && (
+        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-cyan-400 text-xl font-semibold animate-float-up">
+          +1 reach 🔥
+        </div>
+      )}
+      {showEchoAnim && (
+        <div className="pointer-events-none absolute left-0 top-1/2 w-full h-1">
+          <div className="w-6 h-6 rounded-full bg-gradient-to-r from-cyan-400 to-purple-500 blur-sm animate-[moveEcho_0.8s_linear]" />
+        </div>
+      )}
 
+      <style jsx>{`
+        @keyframes floatUp {
+          0% {
+            opacity: 0;
+            transform: translate(-50%, 20px);
+          }
+          30% {
+            opacity: 1;
+          }
+          100% {
+            opacity: 0;
+            transform: translate(-50%, -40px);
+          }
+        }
+
+        .animate-float-up {
+          animation: floatUp 2s ease-out;
+        }
+
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .animate-fade-in {
+          animation: fadeIn 0.3s ease-out;
+        }
+      `}</style>
+
+      {/* 🔔 NOTIFICATION */}
+      {notification && (
+        <div className="fixed top-20 right-4 bg-white/10 backdrop-blur-md border border-white/10 px-4 py-2 rounded-lg text-sm animate-fade-in">
+          {notification}
+        </div>
+      )}
+
+      <div className="relative max-w-5xl mx-auto flex flex-col items-center justify-center min-h-[85vh] space-y-10">
+        {/* HEADER */}
+        <div className="text-center space-y-3">
+          <h1 className="text-4xl font-semibold">Send an Echo</h1>
+          <p className="text-gray-500 text-sm">
+            Your message will travel across strangers
+          </p>
+        </div>
+
+        {/* SUCCESS */}
         {sent && (
-          <div className="p-4 rounded-xl bg-green-500/10 border border-green-500/30 text-green-300 text-center space-y-2">
-            <p className="text-sm">✅ Echo sent into the network</p>
-
-            <div className="flex gap-2 justify-center">
-              <a
-                href="/inbox"
-                className="px-3 py-1 text-xs rounded bg-white/10 hover:bg-white/20 transition"
-              >
-                Go to Inbox
-              </a>
-
-              <a
-                href="/dashboard"
-                className="px-3 py-1 text-xs rounded bg-white/10 hover:bg-white/20 transition"
-              >
-                View Stats
-              </a>
-            </div>
+          <div className="text-green-400 text-sm animate-bounce">
+            🚀 Echo launched
           </div>
         )}
 
-        <div className="p-4 rounded-xl bg-white/5 backdrop-blur-lg border border-white/10 shadow-md">
-          <Textarea
-            placeholder="Write your echo..."
+        {/* INPUT */}
+        <div
+          className={`
+            w-full max-w-3xl rounded-2xl p-5 transition-all duration-500
+            border ${focused ? "border-cyan-400/40" : "border-white/10"}
+            bg-white/5 backdrop-blur-sm
+            ${focused ? "shadow-[0_0_60px_rgba(34,211,238,0.25)]" : ""}
+            ${typingPulse ? "scale-[1.01]" : ""}
+            ${isSending ? "opacity-50 scale-95 -translate-y-4" : ""}
+          `}
+        >
+          <textarea
+            ref={textareaRef}
+            placeholder="Write something worth passing on..."
             value={message}
-            onChange={(e) => setMessage(e.target.value)}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            onChange={handleInput}
             maxLength={280}
-            className="bg-transparent border-none focus-visible:ring-0 text-base"
+            className="w-full bg-transparent outline-none resize-none text-lg text-white min-h-[140px]"
           />
 
-          <div className="flex justify-between items-center mt-3">
-            <span className="text-xs text-gray-500">{message.length}/280</span>
-
-            <Button
-              className="px-4 py-2 text-sm rounded-lg bg-gradient-to-r from-cyan-500 to-purple-600 hover:scale-105 transition duration-200"
-              onClick={handleSend}
-            >
-              Send
-            </Button>
+          <div className="flex justify-between text-xs text-gray-500 mt-3">
+            <span>{isValid ? "Ready 🚀" : "Make it meaningful"}</span>
+            <span>{message.length}/280</span>
           </div>
         </div>
 
+        {/* ERROR */}
+        {errorMsg && (
+          <div className="text-red-400 text-sm text-center">{errorMsg}</div>
+        )}
+
+        {/* CTA */}
         <Button
-          variant="outline"
-          className="w-full text-sm border-white/10 text-gray-400 hover:text-white hover:border-white/20"
-          onClick={async () => {
-            console.log("🚪 Logging out");
-            await supabase.auth.signOut();
-            setUser(null);
-          }}
+          onClick={handleSend}
+          disabled={!isValid || cooldown > 0}
+          className={`
+            w-full max-w-2xl mx-auto h-12 rounded-xl text-black text-base
+            bg-gradient-to-r from-cyan-400 to-purple-500
+            transition-all duration-200
+            active:scale-95
+            ${
+              cooldown > 0 ? "opacity-50" : "hover:scale-[1.03] hover:shadow-xl"
+            }
+          `}
         >
-          Logout
+          {cooldown > 0 ? `Wait ${cooldown}s` : "Send Echo"}
         </Button>
       </div>
     </main>

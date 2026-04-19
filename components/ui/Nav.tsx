@@ -1,75 +1,54 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 export default function Nav() {
+  const pathname = usePathname();
+
+  const items = [
+    { href: "/", label: "Home", icon: "🏠" },
+    { href: "/inbox", label: "Inbox", icon: "📥" },
+    { href: "/dashboard", label: "Echoes", icon: "📊" },
+    { href: "/leaderboard", label: "Top", icon: "🌍" },
+  ];
+
   return (
     <>
-      {/* 🔝 TOP NAV (Desktop) */}
-      <nav className="fixed top-0 left-0 w-full bg-black/60 backdrop-blur-md border-b border-white/10 z-50">
-        <div className="max-w-xl mx-auto flex justify-between items-center px-3 sm:px-4 py-3 text-white">
-          <span className="font-semibold text-base sm:text-lg tracking-tight">
-            EchoChain
-          </span>
-
-          {/* Desktop links */}
-          <div className="hidden sm:flex gap-5 text-sm text-gray-300">
-            <Link href="/" className="hover:text-white transition">
-              Home
-            </Link>
-            <Link href="/inbox" className="hover:text-white transition">
-              Inbox
-            </Link>
-            <Link href="/dashboard" className="hover:text-white transition">
-              Dashboard
-            </Link>
-            <Link href="/leaderboard" className="hover:text-white transition">
-              Leaderboard
-            </Link>
-          </div>
+      {/* 🔝 HEADER */}
+      <nav className="fixed top-0 left-0 w-full z-50 bg-black/70 backdrop-blur-md border-b border-white/10">
+        <div className="max-w-md mx-auto flex items-center justify-center py-3 text-white font-semibold tracking-tight">
+          EchoChain
         </div>
       </nav>
 
-      {/* 📱 BOTTOM NAV (Mobile) */}
-      <div className="sm:hidden fixed bottom-0 left-0 w-full bg-black/70 backdrop-blur-md border-t border-white/10 z-50">
-        <div className="flex justify-around items-center py-2 text-xs text-gray-400">
-          <Link
-            href="/"
-            className="flex flex-col items-center gap-1 hover:text-white"
-          >
-            <span>🏠</span>
-            Home
-          </Link>
+      {/* 📱 FOOTER */}
+      <div className="fixed bottom-0 left-0 w-full z-50 bg-black/80 backdrop-blur-md border-t border-white/10">
+        <div className="max-w-md mx-auto flex justify-around py-2">
+          {items.map((item) => {
+            const active = pathname === item.href;
 
-          <Link
-            href="/inbox"
-            className="flex flex-col items-center gap-1 hover:text-white"
-          >
-            <span>📥</span>
-            Inbox
-          </Link>
-
-          <Link
-            href="/dashboard"
-            className="flex flex-col items-center gap-1 hover:text-white"
-          >
-            <span>📊</span>
-            Stats
-          </Link>
-
-          <Link
-            href="/leaderboard"
-            className="flex flex-col items-center gap-1 hover:text-white"
-          >
-            <span>🌍</span>
-            Top
-          </Link>
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex flex-col items-center text-xs transition-all ${
+                  active
+                    ? "text-white scale-110"
+                    : "text-gray-500 hover:text-white"
+                }`}
+              >
+                <span className="text-lg">{item.icon}</span>
+                {item.label}
+              </Link>
+            );
+          })}
         </div>
       </div>
 
-      {/* 📏 SPACER (prevents content hiding behind navs) */}
-      <div className="h-14 sm:h-16" />
-      <div className="h-16 sm:hidden" />
+      {/* SPACING */}
+      <div className="h-14" />
+      <div className="h-16" />
     </>
   );
 }
