@@ -4,52 +4,76 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 export default function Dashboard() {
-  const [echoes, setEchoes] = useState<any[]>([]);
+  const [ripples, setRipples] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchEchoes();
+    fetchRipples();
   }, []);
 
-  const fetchEchoes = async () => {
+  const fetchRipples = async () => {
     const { data } = await supabase
       .from("echoes")
       .select("*")
       .order("chain_length", { ascending: false });
 
-    setEchoes(data || []);
+    setRipples(data || []);
+    setLoading(false);
   };
+
+  if (loading) {
+    return (
+      <main className="min-h-screen flex items-center justify-center text-gray-400">
+        Loading...
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen px-4 pb-24 text-white">
       <div className="max-w-md mx-auto flex flex-col gap-6 text-center">
-        <div>
-          <h1 className="text-2xl font-semibold">📊 Your Echoes</h1>
-          <p className="text-sm text-gray-500">Ranked by performance 🚀</p>
+        <div className="space-y-2">
+          <h1>Your Ripples</h1>
+          <p>You started these waves 🌊</p>
         </div>
 
-        <div className="space-y-4">
-          {echoes.map((e, i) => (
-            <div
-              key={e.id}
-              className="p-5 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm text-left"
-            >
-              <div className="flex justify-between mb-2">
-                <span className="text-sm">#{i + 1}</span>
-                <span className="text-yellow-400">🔥 {e.viral_score}</span>
-              </div>
+        {ripples.length === 0 ? (
+          <p className="text-muted">No ripples yet</p>
+        ) : (
+          <div className="space-y-4">
+            {ripples.map((ripple, index) => (
+              <div
+                key={ripple.id}
+                className="p-5 glass-card glass-card-hover fade-in text-left"
+              >
+                <div className="flex justify-between mb-3">
+                  <span className="text-muted">#{index + 1}</span>
 
-              <p className="text-lg text-cyan-300">{e.content}</p>
+                  <div className="text-right">
+                    <div className="font-semibold text-orange-400">
+                      🔥 {ripple.chain_length}
+                    </div>
+                    <div className="text-subtle">chain</div>
+                  </div>
+                </div>
 
-              <div className="text-sm text-gray-400 mt-2">
-                🌍 {e.total_reach} reached
-              </div>
+                <p className="text-xl font-medium text-white leading-relaxed mb-2">
+                  {ripple.content}
+                </p>
 
-              <div className="text-sm text-gray-400">
-                🔥 {e.chain_length} chain
+                <div className="flex justify-between text-muted">
+                  <span>🌍 {ripple.total_reach} reached</span>
+
+                  <span>
+                    {ripple.status === "active" && "🌊 In motion"}
+                    {ripple.status === "stalled" && "⏸ Waiting"}
+                    {ripple.status === "dead" && "💀 Ended"}
+                  </span>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </main>
   );
