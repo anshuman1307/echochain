@@ -8,32 +8,107 @@ export default function Inbox() {
   const [delivery, setDelivery] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isRippling, setIsRippling] = useState(false);
+  const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
-    fetchNextRipple();
+    const init = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) return;
+
+      setUser(user);
+    };
+
+    init();
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      fetchNextRipple();
+    }
+  }, [user]);
 
   const fetchNextRipple = async () => {
     const { data } = await supabase
       .from("echo_deliveries")
       .select("*, echoes(*)")
       .eq("status", "pending")
+      .eq("user_id", user.id)
       .limit(1)
-      .single();
+      .maybeSingle();
 
     setDelivery(data);
     setLoading(false);
   };
 
+  const selectNextUser = async (ripple: any, currentUserId: string) => {
+    const { data: users, error } = await supabase.from("users").select("id");
+
+    if (error || !users || users.length === 0) return null;
+
+    const otherUsers = users.filter((u) => u.id !== currentUserId);
+
+    const availableUsers = otherUsers.filter(
+      (u) => !ripple.visited_users?.includes(u.id),
+    );
+
+    const pool = availableUsers.length > 0 ? availableUsers : otherUsers;
+
+    if (pool.length === 0) return null;
+
+    return pool[Math.floor(Math.random() * pool.length)];
+  };
+
   const handleAction = async (type: "pass" | "reject") => {
     if (!delivery) return;
+
+    const ripple = delivery.echoes;
 
     setIsRippling(true);
 
     setTimeout(async () => {
+      if (type === "pass") {
+        const nextUser = await selectNextUser(ripple, user.id);
+        if (!nextUser) return;
+
+        await supabase
+          .from("echoes")
+          .update({
+            chain_length: ripple.chain_length + 1,
+            total_reach: ripple.total_reach + 1,
+            visited_users: [...(ripple.visited_users || []), user.id],
+          })
+          .eq("id", ripple.id);
+
+        await supabase.from("echo_deliveries").insert([
+          {
+            echo_id: ripple.id,
+            user_id: nextUser.id,
+            status: "pending",
+            step_number: ripple.chain_length + 1,
+          },
+        ]);
+      }
+
+      if (type === "reject") {
+        const newLives = ripple.lives_remaining - 1;
+
+        await supabase
+          .from("echoes")
+          .update({
+            lives_remaining: newLives,
+            status: newLives <= 0 ? "dead" : "active",
+          })
+          .eq("id", ripple.id);
+      }
+
       await supabase
         .from("echo_deliveries")
-        .update({ status: type === "pass" ? "passed" : "rejected" })
+        .update({
+          status: type === "pass" ? "passed" : "rejected",
+        })
         .eq("id", delivery.id);
 
       setIsRippling(false);
@@ -51,14 +126,16 @@ export default function Inbox() {
   if (loading) {
     return (
       <main className="min-h-screen flex items-center justify-center text-gray-400">
-        Loading...
+        Loading...{" "}
       </main>
     );
   }
 
   return (
     <main className="min-h-screen px-4 pb-24 text-white">
+      {" "}
       <div className="max-w-md mx-auto flex flex-col items-center gap-6 text-center">
+        {/* HEADER */}
         <div className="space-y-2">
           <h1>Inbox</h1>
           <p>A ripple is passing through you.</p>
