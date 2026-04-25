@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 
 export default function Inbox() {
   const [delivery, setDelivery] = useState<any>(null);
+  const [journey, setJourney] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRippling, setIsRippling] = useState(false);
   const [user, setUser] = useState<any>(null);
@@ -15,19 +16,14 @@ export default function Inbox() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-
       if (!user) return;
-
       setUser(user);
     };
-
     init();
   }, []);
 
   useEffect(() => {
-    if (user) {
-      fetchNextRipple();
-    }
+    if (user) fetchNextRipple();
   }, [user]);
 
   const fetchNextRipple = async () => {
@@ -40,13 +36,37 @@ export default function Inbox() {
       .maybeSingle();
 
     setDelivery(data);
+
+    if (data?.echo_id) {
+      const { data: steps } = await supabase
+        .from("echo_deliveries")
+        .select("city, country, step_number")
+        .eq("echo_id", data.echo_id)
+        .not("city", "is", null)
+        .order("step_number", { ascending: true });
+
+      setJourney(steps || []);
+    }
+
     setLoading(false);
   };
 
-  const selectNextUser = async (ripple: any, currentUserId: string) => {
-    const { data: users, error } = await supabase.from("users").select("id");
+  const getLocation = async () => {
+    try {
+      const res = await fetch("/api/location");
+      const data = await res.json();
+      return {
+        city: data.city || "Unknown",
+        country: data.country || "Unknown",
+      };
+    } catch {
+      return { city: "Unknown", country: "Unknown" };
+    }
+  };
 
-    if (error || !users || users.length === 0) return null;
+  const selectNextUser = async (ripple: any, currentUserId: string) => {
+    const { data: users } = await supabase.from("users").select("id");
+    if (!users || users.length === 0) return null;
 
     const otherUsers = users.filter((u) => u.id !== currentUserId);
 
@@ -69,6 +89,8 @@ export default function Inbox() {
     setIsRippling(true);
 
     setTimeout(async () => {
+      const { city, country } = await getLocation();
+
       if (type === "pass") {
         const nextUser = await selectNextUser(ripple, user.id);
         if (!nextUser) return;
@@ -107,7 +129,11 @@ export default function Inbox() {
       await supabase
         .from("echo_deliveries")
         .update({
-          status: type === "pass" ? "passed" : "rejected",
+          status: "done",
+          action: type,
+          city,
+          country,
+          rejection_reason: type === "reject" ? "User rejected" : null,
         })
         .eq("id", delivery.id);
 
@@ -123,6 +149,11 @@ export default function Inbox() {
     return "❤️".repeat(safe) + "💔".repeat(3 - safe);
   };
 
+  const uniqueCities = new Set(journey.map((j) => j.city)).size;
+  const uniqueCountries = new Set(journey.map((j) => j.country)).size;
+
+  const visibleJourney = journey.slice(-5);
+
   if (loading) {
     return (
       <main className="min-h-screen flex items-center justify-center text-gray-400">
@@ -135,7 +166,6 @@ export default function Inbox() {
     <main className="min-h-screen px-4 pb-24 text-white">
       {" "}
       <div className="max-w-md mx-auto flex flex-col items-center gap-6 text-center">
-        {/* HEADER */}
         <div className="space-y-2">
           <h1>Inbox</h1>
           <p>A ripple is passing through you.</p>
@@ -149,7 +179,7 @@ export default function Inbox() {
               <div className="ripple-effect top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
             )}
 
-            <p className="text-xl font-medium text-white leading-relaxed mb-3">
+            <p className="text-xl font-medium leading-relaxed mb-3">
               {ripple.content}
             </p>
 
@@ -177,6 +207,39 @@ export default function Inbox() {
                 {ripple.lives_remaining} lives left
               </div>
             </div>
+
+            {visibleJourney.length > 0 && (
+              <div className="mb-5 text-left">
+                <p className="text-sm text-gray-400 mb-3">🌍 Journey</p>
+
+                <div className="relative flex items-center gap-2 overflow-x-auto pb-2">
+                  {visibleJourney.map((j, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <div
+                        className={`
+                      px-3 py-1 rounded-full text-xs whitespace-nowrap
+                      ${
+                        i === visibleJourney.length - 1
+                          ? "bg-cyan-400 text-black shadow-[0_0_12px_rgba(34,211,238,0.6)]"
+                          : "bg-white/10 text-gray-300"
+                      }
+                    `}
+                      >
+                        {j.city}
+                      </div>
+
+                      {i !== visibleJourney.length - 1 && (
+                        <div className="w-4 h-[2px] bg-white/20" />
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <p className="text-xs text-gray-500 mt-2">
+                  {uniqueCities} cities • {uniqueCountries} countries
+                </p>
+              </div>
+            )}
 
             <div className="pt-3 flex gap-3">
               <Button
