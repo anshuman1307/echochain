@@ -76,7 +76,6 @@ export default function Inbox() {
 
   const handleAction = async (type: "pass" | "reject") => {
     const delivery = deliveries[currentIndex];
-    console.log(delivery);
     if (!delivery) return;
 
     const ripple = delivery.echoes;
@@ -89,7 +88,7 @@ export default function Inbox() {
       await supabase
         .from("echo_deliveries")
         .update({
-          status: "pending",
+          status: type === "pass" ? "passed" : "rejected",
           action: type,
           city,
           country,
@@ -110,31 +109,39 @@ export default function Inbox() {
       }
 
       if (type === "pass") {
-        const nextUser = await selectNextUser(ripple, user.id);
+        const { data: existing } = await supabase
+          .from("echo_deliveries")
+          .select("id")
+          .eq("echo_id", ripple.id)
+          .eq("status", "pending");
 
-        if (!nextUser) {
-          await supabase
-            .from("echoes")
-            .update({ status: "stalled" })
-            .eq("id", ripple.id);
-        } else {
-          await supabase
-            .from("echoes")
-            .update({
-              chain_length: ripple.chain_length + 1,
-              total_reach: ripple.total_reach + 1,
-              visited_users: [...(ripple.visited_users || []), user.id],
-            })
-            .eq("id", ripple.id);
+        if (!existing || existing.length === 0) {
+          const nextUser = await selectNextUser(ripple, user.id);
 
-          await supabase.from("echo_deliveries").insert([
-            {
-              echo_id: ripple.id,
-              user_id: nextUser.id,
-              status: "pending",
-              step_number: ripple.chain_length + 1,
-            },
-          ]);
+          if (!nextUser) {
+            await supabase
+              .from("echoes")
+              .update({ status: "stalled" })
+              .eq("id", ripple.id);
+          } else {
+            await supabase
+              .from("echoes")
+              .update({
+                chain_length: ripple.chain_length + 1,
+                total_reach: ripple.total_reach + 1,
+                visited_users: [...(ripple.visited_users || []), user.id],
+              })
+              .eq("id", ripple.id);
+
+            await supabase.from("echo_deliveries").insert([
+              {
+                echo_id: ripple.id,
+                user_id: nextUser.id,
+                status: "pending",
+                step_number: ripple.chain_length + 1,
+              },
+            ]);
+          }
         }
       }
 
