@@ -76,6 +76,7 @@ export default function Inbox() {
 
   const handleAction = async (type: "pass" | "reject") => {
     const delivery = deliveries[currentIndex];
+    console.log(delivery);
     if (!delivery) return;
 
     const ripple = delivery.echoes;
@@ -88,7 +89,7 @@ export default function Inbox() {
       await supabase
         .from("echo_deliveries")
         .update({
-          status: "done",
+          status: "pending",
           action: type,
           city,
           country,
