@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { Flame, Globe, Waves, Skull } from "lucide-react";
 
 export default function Dashboard() {
   const [ripples, setRipples] = useState<any[]>([]);
@@ -114,7 +115,11 @@ export default function Dashboard() {
         {" "}
         <div className="space-y-2">
           {" "}
-          <h1>Your Ripples</h1> <p>You started these waves 🌊</p>{" "}
+          <h1>Your Ripples</h1>
+          <p className="flex items-center justify-center gap-2">
+            You started these waves{" "}
+            <Waves size={16} className="text-cyan-400" />
+          </p>{" "}
         </div>
         {ripples.length === 0 ? (
           <p className="text-muted">No ripples yet</p>
@@ -135,8 +140,8 @@ export default function Dashboard() {
                     <span className="text-muted">#{index + 1}</span>
 
                     <div className="text-right">
-                      <div className="font-semibold text-orange-400">
-                        🔥 {ripple.chain_length}
+                      <div className="font-semibold text-orange-400 flex items-center justify-end gap-1">
+                        <Flame size={16} /> {ripple.chain_length}
                       </div>
                       <div className="text-subtle">chain</div>
                     </div>
@@ -147,7 +152,10 @@ export default function Dashboard() {
                   </p>
 
                   <div className="flex justify-between text-sm text-muted mb-3">
-                    <span>🌍 {ripple.total_reach} reached</span>
+                    <span className="flex items-center gap-1.5">
+                      <Globe size={14} className="text-blue-400" />
+                      {ripple.total_reach} reached
+                    </span>
                     <span>
                       {ripple.uniqueCities} cities • {ripple.uniqueCountries}{" "}
                       countries
@@ -187,9 +195,22 @@ export default function Dashboard() {
                     </div>
                   )}
 
-                  <div className="text-xs text-gray-500">
-                    {ripple.status === "active" && "🌊 In motion"}
-                    {ripple.status === "dead" && "💀 Ended"}
+                  <div className="text-xs text-gray-500 flex items-center gap-1.5">
+                    {ripple.status === "active" && (
+                      <>
+                        <Waves
+                          size={12}
+                          className="text-cyan-500 animate-pulse"
+                        />
+                        In motion
+                      </>
+                    )}
+                    {ripple.status === "dead" && (
+                      <>
+                        <Skull size={12} className="text-gray-600" />
+                        Ended
+                      </>
+                    )}
                   </div>
                 </div>
               );

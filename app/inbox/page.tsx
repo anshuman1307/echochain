@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
+import { Waves, Skull, Heart, HeartOff, Loader2 } from "lucide-react";
 
 export default function Inbox() {
   const [deliveries, setDeliveries] = useState<any[]>([]);
@@ -84,42 +85,16 @@ export default function Inbox() {
     setTimeout(async () => {
       const { city, country } = await getLocation();
 
-      if (type === "pass") {
-        const { data: existing } = await supabase
-          .from("echo_deliveries")
-          .select("id")
-          .eq("echo_id", ripple.id)
-          .eq("status", "pending");
-
-        if (!existing || existing.length === 0) {
-          const nextUser = await selectNextUser(ripple, user.id);
-
-          if (!nextUser) {
-            await supabase
-              .from("echoes")
-              .update({ status: "stalled" })
-              .eq("id", ripple.id);
-          } else {
-            await supabase
-              .from("echoes")
-              .update({
-                chain_length: ripple.chain_length + 1,
-                total_reach: ripple.total_reach + 1,
-                visited_users: [...(ripple.visited_users || []), user.id],
-              })
-              .eq("id", ripple.id);
-
-            await supabase.from("echo_deliveries").insert([
-              {
-                echo_id: ripple.id,
-                user_id: nextUser.id,
-                status: "pending",
-                step_number: ripple.chain_length + 1,
-              },
-            ]);
-          }
-        }
-      }
+      await supabase
+        .from("echo_deliveries")
+        .update({
+          status: "done",
+          action: type,
+          city,
+          country,
+          rejection_reason: type === "reject" ? "User rejected" : null,
+        })
+        .eq("id", delivery.id);
 
       if (type === "reject") {
         const newLives = ripple.lives_remaining - 1;
@@ -133,16 +108,34 @@ export default function Inbox() {
           .eq("id", ripple.id);
       }
 
-      await supabase
-        .from("echo_deliveries")
-        .update({
-          status: "done",
-          action: type,
-          city,
-          country,
-          rejection_reason: type === "reject" ? "User rejected" : null,
-        })
-        .eq("id", delivery.id);
+      if (type === "pass") {
+        const nextUser = await selectNextUser(ripple, user.id);
+
+        if (!nextUser) {
+          await supabase
+            .from("echoes")
+            .update({ status: "stalled" })
+            .eq("id", ripple.id);
+        } else {
+          await supabase
+            .from("echoes")
+            .update({
+              chain_length: ripple.chain_length + 1,
+              total_reach: ripple.total_reach + 1,
+              visited_users: [...(ripple.visited_users || []), user.id],
+            })
+            .eq("id", ripple.id);
+
+          await supabase.from("echo_deliveries").insert([
+            {
+              echo_id: ripple.id,
+              user_id: nextUser.id,
+              status: "pending",
+              step_number: ripple.chain_length + 1,
+            },
+          ]);
+        }
+      }
 
       const nextIndex = currentIndex + 1;
 
@@ -153,7 +146,7 @@ export default function Inbox() {
       }
 
       setIsRippling(false);
-    }, 500);
+    }, 400);
   };
 
   const delivery = deliveries[currentIndex];
@@ -162,12 +155,23 @@ export default function Inbox() {
 
   const renderLives = (lives: number) => {
     const safe = Math.max(0, Math.min(3, lives || 0));
-    return "❤️".repeat(safe) + "💔".repeat(3 - safe);
+    return (
+      <div className="flex gap-1">
+        {[...Array(3)].map((_, i) =>
+          i < safe ? (
+            <Heart key={i} size={18} className="fill-red-500 text-red-500" />
+          ) : (
+            <HeartOff key={i} size={18} className="text-gray-600" />
+          ),
+        )}
+      </div>
+    );
   };
 
   if (loading) {
     return (
       <main className="min-h-screen flex items-center justify-center text-gray-400">
+        <Loader2 className="animate-spin mr-2" size={20} />
         Loading...{" "}
       </main>
     );
@@ -210,10 +214,10 @@ export default function Inbox() {
               </div>
 
               <div className="mb-4">
-                <div className="text-xl">
+                <div className="mb-1">
                   {renderLives(ripple.lives_remaining)}
                 </div>
-                <div className="text-muted">
+                <div className="text-muted text-sm">
                   {ripple.lives_remaining} lives left
                 </div>
               </div>
@@ -221,16 +225,18 @@ export default function Inbox() {
               <div className="flex gap-3">
                 <Button
                   onClick={() => handleAction("pass")}
-                  className="flex-1 btn-primary"
+                  disabled={isRippling}
+                  className="flex-1 btn-primary gap-2"
                 >
-                  🌊 Pass it on
+                  <Waves size={16} /> Pass it on
                 </Button>
 
                 <Button
                   onClick={() => handleAction("reject")}
-                  className="flex-1 btn-danger"
+                  disabled={isRippling}
+                  className="flex-1 btn-danger gap-2"
                 >
-                  💀 End it
+                  <Skull size={16} /> End it
                 </Button>
               </div>
 

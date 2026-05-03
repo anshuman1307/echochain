@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
+// 1. Import Lucide icons
+import { Inbox, Globe, Flame, Waves, Loader2, Send } from "lucide-react";
 
 export default function Home() {
   const [message, setMessage] = useState("");
@@ -16,7 +18,10 @@ export default function Home() {
   const [cooldown, setCooldown] = useState(0);
   const [typingPulse, setTypingPulse] = useState(false);
   const [showRippleAnim, setShowRippleAnim] = useState(false);
-  const [notification, setNotification] = useState<string | null>(null);
+  const [notification, setNotification] = useState<{
+    text: string;
+    icon: any;
+  } | null>(null);
   const [reachAnim, setReachAnim] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -64,9 +69,12 @@ export default function Home() {
           const newDelivery = payload.new;
 
           if (newDelivery.user_id === user.id) {
-            setNotification("📥 A ripple reached you");
+            setNotification({ text: "A ripple reached you", icon: Inbox });
           } else {
-            setNotification("🌍 Your ripple spread further");
+            setNotification({
+              text: "Your ripple spread further",
+              icon: Globe,
+            });
             setReachAnim(true);
             setTimeout(() => setReachAnim(false), 2000);
           }
@@ -160,6 +168,7 @@ export default function Home() {
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center text-gray-400">
+        <Loader2 className="animate-spin mr-2" size={20} />
         Loading...{" "}
       </main>
     );
@@ -168,28 +177,30 @@ export default function Home() {
   return (
     <main className="relative min-h-screen px-4 text-white overflow-hidden">
       {notification && (
-        <div className="fixed top-20 right-4 z-50 px-4 py-2 rounded-lg text-sm bg-white/10 backdrop-blur-md border border-white/10 animate-fade-in">
-          {notification}{" "}
+        <div className="fixed top-20 right-4 z-50 flex items-center gap-2 px-4 py-2 rounded-lg text-sm bg-white/10 backdrop-blur-md border border-white/10 animate-fade-in">
+          <notification.icon size={16} className="text-cyan-400" />
+          {notification.text}{" "}
         </div>
       )}
 
       {reachAnim && (
-        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-cyan-400 text-xl font-semibold animate-float-up">
-          +1 reach 🔥
+        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-2 text-cyan-400 text-xl font-semibold animate-float-up">
+          +1 reach{" "}
+          <Flame size={24} className="fill-orange-400 text-orange-400" />
         </div>
       )}
 
       <div className="relative max-w-4xl mx-auto flex flex-col items-center justify-center min-h-[85vh] space-y-10">
         <div className="text-center space-y-3">
           <h1 className="text-4xl font-semibold">Start a Ripple</h1>
-          <p className="text-gray-400 text-sm">
-            This could reach someone far away 🌍
+          <p className="flex items-center justify-center gap-2 text-gray-400 text-sm">
+            This could reach someone far away <Globe size={14} />
           </p>
         </div>
 
         {sent && (
-          <div className="text-green-400 text-sm animate-bounce">
-            🌊 Ripple started
+          <div className="flex items-center gap-2 text-green-400 text-sm animate-bounce">
+            <Waves size={16} /> Ripple started
           </div>
         )}
 
@@ -220,7 +231,15 @@ export default function Home() {
           />
 
           <div className="flex justify-between text-xs text-gray-500 mt-3">
-            <span>{isValid ? "Ready 🌊" : "Make it meaningful"}</span>
+            <span className="flex items-center gap-1">
+              {isValid ? (
+                <>
+                  Ready <Waves size={12} className="text-cyan-400" />
+                </>
+              ) : (
+                "Make it meaningful"
+              )}
+            </span>
             <span>{message.length}/280</span>
           </div>
         </div>
@@ -231,12 +250,19 @@ export default function Home() {
           className={`
         w-full max-w-2xl mx-auto h-12 rounded-xl text-black text-base
         bg-gradient-to-r from-cyan-400 to-purple-500
-        transition-all duration-200
+        transition-all duration-200 flex items-center gap-2
         active:scale-95
         ${cooldown > 0 ? "opacity-50" : "hover:scale-[1.03] hover:shadow-xl"}
       `}
         >
-          {cooldown > 0 ? `Wait ${cooldown}s` : "Start Ripple"}
+          {isSending ? (
+            <Loader2 className="animate-spin" size={18} />
+          ) : (
+            <>
+              {cooldown > 0 ? `Wait ${cooldown}s` : "Start Ripple"}
+              {cooldown === 0 && <Send size={18} />}
+            </>
+          )}
         </Button>
       </div>
     </main>
